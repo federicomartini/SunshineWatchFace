@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="digital_text_size">40dp</dimen>
-    <dimen name="digital_text_size_round">45dp</dimen>
+    <dimen name="digital_text_size">56dp</dimen>
+    <dimen name="digital_text_size_round">56dp</dimen>
     <dimen name="digital_x_offset">15dp</dimen>
     <dimen name="digital_x_offset_round">25dp</dimen>
     <dimen name="digital_y_offset">90dp</dimen>
+    <dimen name="weather_icon_width">32dp</dimen>
+    <dimen name="weather_icon_height">32dp</dimen>
+    <dimen name="weather_icon_margin">40dp</dimen>
+    <dimen name="digital_line_height">42dp</dimen>
+    <dimen name="digital_temp_text_size">24dp</dimen>
+    <dimen name="digital_temp_x_offset">64dp</dimen>
+    <dimen name="digital_temp_x_offset_round">74dp</dimen>
+    <dimen name="divider_line_length">40dp</dimen>
+    <dimen name="divider_margin_top">24dp</dimen>
 </resources>

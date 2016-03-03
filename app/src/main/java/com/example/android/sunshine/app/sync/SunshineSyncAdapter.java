@@ -36,6 +36,15 @@ import com.example.android.sunshine.app.R;
 import com.example.android.sunshine.app.Utility;
 import com.example.android.sunshine.app.data.WeatherContract;
 import com.example.android.sunshine.app.muzei.WeatherMuzeiSource;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.Asset;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.PutDataMapRequest;
+import com.google.android.gms.wearable.PutDataRequest;
+import com.google.android.gms.wearable.Wearable;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -52,7 +61,8 @@ import java.net.URL;
 import java.util.Vector;
 import java.util.concurrent.ExecutionException;
 
-public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
+public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter implements GoogleApiClient.ConnectionCallbacks,
+        GoogleApiClient.OnConnectionFailedListener {
     public final String LOG_TAG = SunshineSyncAdapter.class.getSimpleName();
     public static final String ACTION_DATA_UPDATED =
             "com.example.android.sunshine.app.ACTION_DATA_UPDATED";
@@ -87,6 +97,15 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     public static final int LOCATION_STATUS_UNKNOWN = 3;
     public static final int LOCATION_STATUS_INVALID = 4;
 
+    /* WEATHER DATA MAP - WATCH FACE */
+    private static final String WEATHER_DATA_MAP_WATCH_FACE = "/weatherDataMapWatchFace";
+    private static final String HIGH_TEMP_WATCH_FACE_KEY = "highTemp";
+    private static final String LOW_TEMP_WATCH_FACE_KEY = "lowTemp";
+    private static final String WEATHER_ICON_WATCH_FACE_KEY = "weatherIcon";
+    private static final String TIME_STAMP_WATCH_FACE_KEY = "timeStamp";
+
+    private GoogleApiClient mGoogleApiClient;
+
     public SunshineSyncAdapter(Context context, boolean autoInitialize) {
         super(context, autoInitialize);
     }
@@ -107,6 +126,14 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
         String format = "json";
         String units = "metric";
         int numDays = 14;
+
+        mGoogleApiClient = new GoogleApiClient.Builder(getContext())
+                .addApi(Wearable.API)
+                .addOnConnectionFailedListener(this)
+                .addConnectionCallbacks(this)
+                .build();
+
+        mGoogleApiClient.connect();
 
         try {
             // Construct the URL for the OpenWeatherMap query
@@ -178,6 +205,11 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 } catch (final IOException e) {
                     Log.e(LOG_TAG, "Error closing stream", e);
                 }
+            }
+
+            if (mGoogleApiClient != null && mGoogleApiClient.isConnected()) {
+                mGoogleApiClient.disconnect();
+                Log.d(LOG_TAG, "Google API Client disconnected");
             }
         }
         return;
@@ -316,6 +348,10 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 high = temperatureObject.getDouble(OWM_MAX);
                 low = temperatureObject.getDouble(OWM_MIN);
 
+                if (i == 0) {
+                    updateWatchFaceForecast(high, low, weatherId);
+                }
+
                 ContentValues weatherValues = new ContentValues();
 
                 weatherValues.put(WeatherContract.WeatherEntry.COLUMN_LOC_KEY, locationId);
@@ -356,6 +392,22 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
             e.printStackTrace();
             setLocationStatus(getContext(), LOCATION_STATUS_SERVER_INVALID);
         }
+    }
+
+    @Override
+    public void onConnected(Bundle bundle) {
+        Log.d(LOG_TAG, "onConnected: " + bundle);
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+        Log.d(LOG_TAG, "onConnectionSuspended: " + i);
+    }
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        Log.d(LOG_TAG, "onConnectionFailed: " + connectionResult);
+
     }
 
     private void updateWidgets() {
@@ -481,6 +533,40 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 cursor.close();
             }
         }
+    }
+
+    private void updateWatchFaceForecast(double highTemp, double lowTemp, int weatherId) {
+
+        PutDataMapRequest dataMap = PutDataMapRequest.create(WEATHER_DATA_MAP_WATCH_FACE).setUrgent();
+        String lowTempString = Utility.formatTemperature(getContext(), lowTemp);
+        String highTempString = Utility.formatTemperature(getContext(), highTemp);
+
+        dataMap.getDataMap().putString(HIGH_TEMP_WATCH_FACE_KEY, highTempString);
+        dataMap.getDataMap().putString(LOW_TEMP_WATCH_FACE_KEY, lowTempString);
+
+        int artResource = Utility.getArtResourceForWeatherCondition(weatherId);
+        Asset weatherIcon = Utility.getBitmapAsset(getContext(), artResource);
+
+        if (weatherIcon == null) {
+            Log.d(LOG_TAG, "weatherIcon Asset is null");
+        }
+
+        dataMap.getDataMap().putAsset(WEATHER_ICON_WATCH_FACE_KEY, weatherIcon);
+        dataMap.getDataMap().putLong(TIME_STAMP_WATCH_FACE_KEY, System.currentTimeMillis());
+        PutDataRequest request = dataMap.asPutDataRequest();
+
+        /* Asking the System to create the Data Item */
+        PendingResult<DataApi.DataItemResult> pendingResult = Wearable.DataApi
+                .putDataItem(mGoogleApiClient, request);
+
+        pendingResult.setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
+            @Override
+            public void onResult(final DataApi.DataItemResult result) {
+                if(result.getStatus().isSuccess()) {
+                    Log.d(LOG_TAG, "Data item set: " + result.getDataItem().getUri());
+                }
+            }
+        });
     }
 
     /**
